@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  # Django uygulaması
+  web:
+    build: .
+    command: /usr/local/bin/wait-for-it rabbitmq:5672 -- /usr/local/bin/wait-for-it db:5432 -- python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8000"
+    depends_on:
+      - rabbitmq
+      - db
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    networks:
+      - app_network
+
+  # Celery worker'ı
+  celery:
+    build: .
+    command: /usr/local/bin/wait-for-it rabbitmq:5672 -- /usr/local/bin/wait-for-it db:5432 -- python -m celery -A DjangoFinalProject worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - rabbitmq
+      - db
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+    networks:
+      - app_network
+
+  # RabbitMQ servisi
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # RabbitMQ management arayüzü
+    networks:
+      - app_network
+    environment:
+      - RABBITMQ_ERLANG_COOKIE=your_cookie
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  # PostgreSQL veritabanı
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydatabase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+# Veritabanı için volume
+volumes:
+  postgres_data:
+
+networks:
+  app_network:
+    driver: bridge
